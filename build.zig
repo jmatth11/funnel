@@ -29,6 +29,8 @@ pub fn build(b: *std.Build) void {
     // running `zig build`).
     b.installArtifact(lib);
 
+    lib.linkLibC();
+
     const exe = b.addExecutable(.{
         .name = "funnel",
         .root_source_file = b.path("src/main.zig"),
