@@ -24,12 +24,12 @@ pub const funnel_callback = fn (*anyopaque) callconv(.C) void;
 
 pub fn error_to_c_error(e: funnel_errors) c_int {
     return switch (e) {
-        funnel_errors.pipe_too_many_descriptors => return std.os.linux.E.MFILE,
-        funnel_errors.pipe_system_table_full => return std.os.linux.E.NFILE,
-        funnel_errors.pipe_invalid_fds_buffer => return std.os.linux.E.FAULT,
-        funnel_errors.pipe_invalid_flags => return std.os.linux.E.INVAL,
-        funnel_errors.would_block => return funnel_notifs_t.WOULD_BLOCK,
-        funnel_errors.closed => funnel_notifs_t.CLOSED,
+        funnel_errors.pipe_too_many_descriptors => @intFromEnum(std.os.linux.E.MFILE),
+        funnel_errors.pipe_system_table_full => @intFromEnum(std.os.linux.E.NFILE),
+        funnel_errors.pipe_invalid_fds_buffer => @intFromEnum(std.os.linux.E.FAULT),
+        funnel_errors.pipe_invalid_flags => @intFromEnum(std.os.linux.E.INVAL),
+        funnel_errors.would_block => @intFromEnum(funnel_notifs_t.WOULD_BLOCK),
+        funnel_errors.closed => @intFromEnum(funnel_notifs_t.CLOSED),
     };
 }
 
@@ -37,10 +37,10 @@ pub fn error_to_c_error(e: funnel_errors) c_int {
 fn pipe_error(err: c_int) !void {
     if (err == -1) {
         const e = std.c._errno();
-        if (e == std.os.linux.E.MFILE) return funnel_errors.pipe_too_many_descriptors;
-        if (e == std.os.linux.E.NFILE) return funnel_errors.pipe_system_table_full;
-        if (e == std.os.linux.E.FAULT) return funnel_errors.pipe_invalid_fds_buffer;
-        if (e == std.os.linux.E.INVAL) return funnel_errors.pipe_invalid_flags;
+        if (e.* == @intFromEnum(std.os.linux.E.MFILE)) return funnel_errors.pipe_too_many_descriptors;
+        if (e.* == @intFromEnum(std.os.linux.E.NFILE)) return funnel_errors.pipe_system_table_full;
+        if (e.* == @intFromEnum(std.os.linux.E.FAULT)) return funnel_errors.pipe_invalid_fds_buffer;
+        if (e.* == @intFromEnum(std.os.linux.E.INVAL)) return funnel_errors.pipe_invalid_flags;
     }
     return;
 }
@@ -58,24 +58,27 @@ pub const EventMarshaller = extern struct {
 pub const funnel_t = extern struct {
     fds: [2]std.c.fd_t = undefined,
     marshaller: EventMarshaller = undefined,
-    event_buffer: [*]u8 = undefined,
 };
 
 pub const Funnel = struct {
     alloc: std.mem.Allocator = undefined,
     lock: std.Thread.Mutex = undefined,
     funnel: funnel_t = funnel_t{},
+    buffer: []u8 = undefined,
     closed: bool = false,
 
-    pub fn init(alloc: std.mem.Allocator, marshaller: EventMarshaller) funnel_errors!Funnel {
+    pub fn init(alloc: std.mem.Allocator, marshaller: EventMarshaller) !Funnel {
         var result: Funnel = Funnel{};
-        const err = std.c.pipe2(&result.funnel.fds, std.c.O.NONBLOCK);
+        const options = std.c.O{
+            .NONBLOCK = true,
+        };
+        const err = std.c.pipe2(&result.funnel.fds, options);
         try pipe_error(err);
         result.lock = std.Thread.Mutex{};
         result.funnel.marshaller = marshaller;
         result.alloc = alloc;
         if (result.funnel.marshaller.size) |size_fn| {
-            result.funnel.event_buffer = try result.alloc.alloc(u8, size_fn());
+            result.buffer = try result.alloc.alloc(u8, size_fn());
         }
         result.closed = false;
         return result;
@@ -88,30 +91,30 @@ pub const Funnel = struct {
         return self.funnel.fds[1];
     }
 
-    pub fn write(self: *Funnel, e: Event) funnel_errors!usize {
+    pub fn write(self: *Funnel, e: Event) funnel_errors!isize {
         if (self.closed) return funnel_errors.closed;
         if (self.lock.tryLock()) {
             defer self.lock.unlock();
-            var n: usize = 0;
+            var n: isize = 0;
+            const len: usize = self.buffer.len;
             if (self.funnel.marshaller.marshal) |marshal_fn| {
                 const buffer = marshal_fn(e.payload);
-                const len = std.mem.len(buffer);
-                n = std.c.fwrite(buffer, @sizeOf(u8), len, self.funnel.writeFd());
+                n = std.c.write(self.writeFd(), buffer, len);
             }
             return n;
         }
         return funnel_errors.would_block;
     }
 
-    pub fn read(self: *Funnel, cb: *const funnel_callback) funnel_errors!usize {
+    pub fn read(self: *Funnel, cb: *const funnel_callback) funnel_errors!isize {
         if (self.closed) return funnel_errors.closed;
-        var result_n: usize = 0;
+        var result_n: isize = 0;
         if (self.lock.tryLock()) {
             defer self.lock.unlock();
-            result_n = std.c.fread(self.funnel.event_buffer, @sizeOf(u8), self.funnel.marshaller.size(), self.funnel.readFd());
+            result_n = std.c.read(self.readFd(), self.buffer.ptr, self.buffer.len);
             if (result_n > 0) {
                 if (self.funnel.marshaller.unmarshal) |unmarshal_fn| {
-                    const event = unmarshal_fn(self.funnel.event_buffer);
+                    const event = unmarshal_fn(self.buffer.ptr);
                     cb(event);
                 }
             }
@@ -124,16 +127,24 @@ pub const Funnel = struct {
         if (self.closed) return;
         self.lock.lock();
         defer self.lock.unlock();
-        self.alloc.free(self.funnel.event_buffer);
-        std.c.close(self.funnel.readFd());
-        std.c.close(self.funnel.writeFd());
+        self.alloc.free(self.buffer);
+        _ = std.c.close(self.readFd());
+        _ = std.c.close(self.writeFd());
         self.closed = true;
     }
 };
 
+/// Typed void* for the C side
+pub export const FunnelPtr = *anyopaque;
+
+// TODO maybe change this signature to something more C friendly.
+// Get rid of *Funnel and return an anyopaque so maybe we can treat the zig struct as a blob of memory
 pub export fn funnel_init(fun: *Funnel, marshaller: EventMarshaller) c_int {
-    const result = Funnel.init(std.heap.page_allocator, marshaller) catch |err| {
-        return error_to_c_error(err);
+    const result = Funnel.init(std.heap.c_allocator, marshaller) catch |err| {
+        if (@TypeOf(err) == funnel_errors) {
+            return error_to_c_error(err);
+        }
+        return -1;
     };
     fun.* = result;
     return 0;
@@ -141,25 +152,29 @@ pub export fn funnel_init(fun: *Funnel, marshaller: EventMarshaller) c_int {
 
 pub const funnel_result = extern struct {
     result: c_int = @intFromEnum(funnel_notifs_t.SUCCESS),
-    len: usize = 0,
+    len: isize = 0,
 };
 
 pub export fn funnel_write(fun: *Funnel, e: Event) funnel_result {
     var result = funnel_result{};
-    var n: usize = 0;
-    n = fun.write(e) catch |err| {
+    var n: isize = 0;
+    if (fun.write(e)) |val| {
+        n = val;
+    } else |err| {
         result.result = error_to_c_error(err);
-    };
+    }
     result.len = n;
     return result;
 }
 
 pub export fn funnel_read(fun: *Funnel, cb: *const funnel_callback) funnel_result {
     var result = funnel_result{};
-    var n: usize = 0;
-    n = fun.read(cb) catch |err| {
+    var n: isize = 0;
+    if (fun.read(cb)) |val| {
+        n = val;
+    } else |err| {
         result.result = error_to_c_error(err);
-    };
+    }
     result.len = n;
     return result;
 }

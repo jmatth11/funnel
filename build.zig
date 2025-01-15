@@ -29,6 +29,7 @@ pub fn build(b: *std.Build) void {
     // running `zig build`).
     b.installArtifact(lib);
 
+    lib.bundle_compiler_rt = true;
     lib.linkLibC();
 
     const exe = b.addExecutable(.{
