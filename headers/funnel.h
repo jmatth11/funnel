@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <sys/cdefs.h>
 
 /**
  * Marshal function type
@@ -78,7 +79,7 @@ struct funnel_result {
  * @param[in] marshaller The event marshaller.
  * @return 0 on success, anything else for failure.
  */
-int funnel_init(struct funnel_t *fun, struct event_marshaller_t marshaller);
+int funnel_init(struct funnel_t *fun, struct event_marshaller_t marshaller) __nonnull((1));
 
 /**
  * Write the given event to the funnel.
@@ -87,7 +88,7 @@ int funnel_init(struct funnel_t *fun, struct event_marshaller_t marshaller);
  * @param[in] e The event data.
  * @return The result. Can be successful, failure, or WOULD_BLOCK.
  */
-struct funnel_result funnel_write(struct funnel_t *fun, struct event_t e);
+struct funnel_result funnel_write(struct funnel_t *fun, struct event_t e) __nonnull((1));
 
 /**
  * Read from the funnel and pass the data to the given callback function.
@@ -96,7 +97,7 @@ struct funnel_result funnel_write(struct funnel_t *fun, struct event_t e);
  * @param[in] cb The callback function to handle the data.
  * @return The result. Can be successful, failure, or WOULD_BLOCK.
  */
-struct funnel_result funnel_read(struct funnel_t *fun, funnel_callback_func cb);
+struct funnel_result funnel_read(struct funnel_t *fun, funnel_callback_func cb) __nonnull((1,2));
 
 /**
  * Free the given funnel.
@@ -104,6 +105,6 @@ struct funnel_result funnel_read(struct funnel_t *fun, funnel_callback_func cb);
  *
  * @param[in] fun The funnel structure.
  */
-void funnel_free(struct funnel_t *fun);
+void funnel_free(struct funnel_t *fun) __nonnull((1));
 
 #endif
