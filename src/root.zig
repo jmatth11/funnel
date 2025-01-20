@@ -17,8 +17,8 @@ pub const funnel_notifs_t = enum(c_int) {
     CLOSED = 2,
 };
 
-pub const marshal_func = fn (*anyopaque) callconv(.C) [*]const u8;
-pub const unmarshal_func = fn ([*]const u8) callconv(.C) *anyopaque;
+pub const marshal_func = fn (*anyopaque, [*]u8, usize) callconv(.C) c_int;
+pub const unmarshal_func = fn ([*]const u8) callconv(.C) ?*anyopaque;
 pub const size_func = fn () callconv(.C) usize;
 pub const funnel_callback = fn (*anyopaque) callconv(.C) void;
 
@@ -95,8 +95,10 @@ pub const Funnel = struct {
             var n: isize = 0;
             const len: usize = self.buffer.len;
             if (self.marshaller.marshal) |marshal_fn| {
-                const buffer = marshal_fn(e.payload);
-                n = std.c.write(self.writeFd(), buffer, len);
+                const ret = marshal_fn(e.payload, self.buffer.ptr, self.buffer.len);
+                if (ret == 0) {
+                    n = std.c.write(self.writeFd(), self.buffer.ptr, len);
+                }
             }
             return n;
         }
@@ -112,7 +114,9 @@ pub const Funnel = struct {
             if (result_n > 0) {
                 if (self.marshaller.unmarshal) |unmarshal_fn| {
                     const event = unmarshal_fn(self.buffer.ptr);
-                    cb(event);
+                    if (event) |e| {
+                        cb(e);
+                    }
                 }
             }
             return result_n;

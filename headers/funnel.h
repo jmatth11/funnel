@@ -7,7 +7,7 @@
 /**
  * Marshal function type
  */
-typedef uint8_t*(*marshal_func)(void*);
+typedef int(*marshal_func)(void*, uint8_t*, size_t);
 /**
  * Unmarshal function type
  */
@@ -78,7 +78,7 @@ struct funnel_result {
  * @param[in] marshaller The event marshaller.
  * @return 0 on success, anything else for failure.
  */
-int funnel_init(funnel_t *fun, event_marshaller_t marshaller);
+int funnel_init(struct funnel_t *fun, struct event_marshaller_t marshaller);
 
 /**
  * Write the given event to the funnel.
@@ -87,7 +87,7 @@ int funnel_init(funnel_t *fun, event_marshaller_t marshaller);
  * @param[in] e The event data.
  * @return The result. Can be successful, failure, or WOULD_BLOCK.
  */
-struct funnel_result funnel_write(funnel_t *fun, event_t *e);
+struct funnel_result funnel_write(struct funnel_t *fun, struct event_t e);
 
 /**
  * Read from the funnel and pass the data to the given callback function.
@@ -96,7 +96,7 @@ struct funnel_result funnel_write(funnel_t *fun, event_t *e);
  * @param[in] cb The callback function to handle the data.
  * @return The result. Can be successful, failure, or WOULD_BLOCK.
  */
-struct funnel_result funnel_read(funnel_t *fun, funnel_callback_func cb);
+struct funnel_result funnel_read(struct funnel_t *fun, funnel_callback_func cb);
 
 /**
  * Free the given funnel.
@@ -104,6 +104,6 @@ struct funnel_result funnel_read(funnel_t *fun, funnel_callback_func cb);
  *
  * @param[in] fun The funnel structure.
  */
-void funnel_free(funnel_t *fun);
+void funnel_free(struct funnel_t *fun);
 
 #endif
