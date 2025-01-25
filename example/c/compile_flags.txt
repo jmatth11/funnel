@@ -1,0 +1,5 @@
+-L../../zig-out/lib/
+-I../../headers/
+-Wall
+-std=c11
+-lfunnel
