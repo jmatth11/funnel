@@ -80,7 +80,25 @@ pub const Funnel = struct {
     closed: bool = false,
 
     /// Initialize with an event marshaller.
-    pub fn init(alloc: std.mem.Allocator, marshaller: EventMarshaller) !*Funnel {
+    pub fn init(alloc: std.mem.Allocator, marshaller: EventMarshaller) !Funnel {
+        var result: Funnel = Funnel{};
+        result.alloc = alloc;
+        const options = std.c.O{
+            .NONBLOCK = true,
+        };
+        const err = std.c.pipe2(&result.fds, options);
+        try pipe_error(err);
+        result.lock = std.Thread.Mutex{};
+        result.marshaller = marshaller;
+        if (result.marshaller.size) |size_fn| {
+            result.buffer = try result.alloc.alloc(u8, size_fn());
+        }
+        result.closed = false;
+        return result;
+    }
+
+    /// Create an allocated Funnel structure with an event marshaller.
+    pub fn create(alloc: std.mem.Allocator, marshaller: EventMarshaller) !*Funnel {
         var result: *Funnel = try alloc.create(Funnel);
         errdefer alloc.destroy(result);
         result.alloc = alloc;
@@ -169,7 +187,7 @@ pub const funnel_t = extern struct {
 /// @param marshaller The event marshaller structure.
 /// @return 0 for success, anything else error.
 pub export fn funnel_init(fun: *funnel_t, marshaller: EventMarshaller) c_int {
-    const result: *Funnel = Funnel.init(std.heap.c_allocator, marshaller) catch |err| {
+    const result: *Funnel = Funnel.create(std.heap.c_allocator, marshaller) catch |err| {
         if (@TypeOf(err) == funnel_errors) {
             return error_to_c_error(err);
         }
