@@ -22,7 +22,7 @@ int data_marshal(void* obj, uint8_t* buffer, size_t len) {
 }
 
 // Define our unmarshal method for the reader
-void* data_unmarshal(uint8_t* buffer) {
+void* data_unmarshal(uint8_t* buffer, size_t len) {
   struct data *local = malloc(sizeof(struct data));
   local->age = buffer[0];
   local->grade = (char)buffer[1];
@@ -35,7 +35,7 @@ size_t data_size() {
 }
 
 // Define our callback to be called within the reader
-void callback(void* obj) {
+void callback(void* obj, void* ctx) {
   struct data *local = (struct data*)obj;
   printf("read data: age=%d, grade=%c\n", local->age, local->grade);
   free(local);
@@ -77,7 +77,7 @@ int main(int argc, char **argv) {
   }
 
   // read data with our callback
-  result = funnel_read(&fun, callback);
+  result = funnel_read(&fun, callback, NULL);
   if (result.result != SUCCESS) {
     printf("funnel read failed: %d\n", result.result);
     exit(1);
