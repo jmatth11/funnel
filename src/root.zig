@@ -62,11 +62,11 @@ pub const Event = extern struct {
 /// Currently the marshaller does not support dynamic payload size.
 pub const EventMarshaller = extern struct {
     /// Marshal events.
-    marshal: ?*marshal_func = undefined,
+    marshal: ?*const marshal_func = undefined,
     /// Unmarshal events.
-    unmarshal: ?*unmarshal_func = undefined,
+    unmarshal: ?*const unmarshal_func = undefined,
     /// Size of event payload.
-    size: ?*size_func = undefined,
+    size: ?*const size_func = undefined,
 };
 
 /// Structure to setup and manage writing and reading events between callers and receivers.
