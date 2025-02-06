@@ -135,7 +135,7 @@ pub const Funnel = struct {
             const len: usize = self.buffer.len;
             if (self.marshaller.marshal) |marshal_fn| {
                 const ret = marshal_fn(e.payload, self.buffer.ptr, self.buffer.len);
-                if (ret == 0) {
+                if (ret != 0) {
                     n = std.c.write(self.writeFd(), self.buffer.ptr, len);
                 }
             }

@@ -18,7 +18,7 @@ int data_marshal(void* obj, uint8_t* buffer, size_t len) {
   printf("marshal data: age=%d, grade=%c\n", local->age, local->grade);
   buffer[0] = local->age;
   buffer[1] = local->grade;
-  return 0;
+  return len;
 }
 
 // Define our unmarshal method for the reader
