@@ -85,7 +85,7 @@ pub const Funnel = struct {
         var result: Funnel = Funnel{};
         result.alloc = alloc;
         const options = std.c.O{
-            .NONBLOCK = nonblock,
+            .NONBLOCK = true,
         };
         const err = std.c.pipe2(&result.fds, options);
         try pipe_error(err);
