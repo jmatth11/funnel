@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
     .size = data_size,
   };
   // initialize
-  int ret = funnel_init(&fun, marshaller);
+  int ret = funnel_init(&fun, marshaller, true);
   if (ret != 0) {
     printf("funnel failed to initialize: %d\n", ret);
     exit(1);

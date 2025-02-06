@@ -78,13 +78,14 @@ pub const Funnel = struct {
     fds: [2]std.c.fd_t = undefined,
     marshaller: EventMarshaller = undefined,
     closed: bool = false,
+    nonblock: bool = true,
 
     /// Initialize with an event marshaller.
-    pub fn init(alloc: std.mem.Allocator, marshaller: EventMarshaller) !Funnel {
+    pub fn init(alloc: std.mem.Allocator, marshaller: EventMarshaller, nonblock: bool) !Funnel {
         var result: Funnel = Funnel{};
         result.alloc = alloc;
         const options = std.c.O{
-            .NONBLOCK = true,
+            .NONBLOCK = nonblock,
         };
         const err = std.c.pipe2(&result.fds, options);
         try pipe_error(err);
@@ -94,16 +95,17 @@ pub const Funnel = struct {
             result.buffer = try result.alloc.alloc(u8, size_fn());
         }
         result.closed = false;
+        result.nonblock = nonblock;
         return result;
     }
 
     /// Create an allocated Funnel structure with an event marshaller.
-    pub fn create(alloc: std.mem.Allocator, marshaller: EventMarshaller) !*Funnel {
+    pub fn create(alloc: std.mem.Allocator, marshaller: EventMarshaller, nonblock: bool) !*Funnel {
         var result: *Funnel = try alloc.create(Funnel);
         errdefer alloc.destroy(result);
         result.alloc = alloc;
         const options = std.c.O{
-            .NONBLOCK = true,
+            .NONBLOCK = nonblock,
         };
         const err = std.c.pipe2(&result.fds, options);
         try pipe_error(err);
@@ -113,6 +115,7 @@ pub const Funnel = struct {
             result.buffer = try result.alloc.alloc(u8, size_fn());
         }
         result.closed = false;
+        result.nonblock = nonblock;
         return result;
     }
 
@@ -125,42 +128,61 @@ pub const Funnel = struct {
         return self.fds[1];
     }
 
+    fn write_fn(self: *Funnel, e: Event) funnel_errors!isize {
+        var n: isize = 0;
+        const len: usize = self.buffer.len;
+        if (self.marshaller.marshal) |marshal_fn| {
+            const ret = marshal_fn(e.payload, self.buffer.ptr, self.buffer.len);
+            if (ret != 0) {
+                n = std.c.write(self.writeFd(), self.buffer.ptr, len);
+            }
+        }
+        return n;
+    }
+
     /// Write the given event to the reader.
     /// Returns would_block if a lock could not be acquired.
     pub fn write(self: *Funnel, e: Event) funnel_errors!isize {
         if (self.closed) return funnel_errors.closed;
-        if (self.lock.tryLock()) {
-            defer self.lock.unlock();
-            var n: isize = 0;
-            const len: usize = self.buffer.len;
-            if (self.marshaller.marshal) |marshal_fn| {
-                const ret = marshal_fn(e.payload, self.buffer.ptr, self.buffer.len);
-                if (ret != 0) {
-                    n = std.c.write(self.writeFd(), self.buffer.ptr, len);
-                }
+        if (self.nonblock) {
+            if (self.lock.tryLock()) {
+                defer self.lock.unlock();
+                return try self.write_fn(e);
             }
-            return n;
+        } else {
+            self.lock.lock();
+            defer self.lock.unlock();
+            return try self.write_fn(e);
         }
         return funnel_errors.would_block;
+    }
+
+    fn read_fn(self: *Funnel, cb: *const funnel_callback, context: *anyopaque) funnel_errors!isize {
+        const result_n: isize = std.c.read(self.readFd(), self.buffer.ptr, self.buffer.len);
+        if (result_n > 0) {
+            if (self.marshaller.unmarshal) |unmarshal_fn| {
+                const event = unmarshal_fn(self.buffer.ptr, self.buffer.len);
+                if (event) |e| {
+                    cb(e, context);
+                }
+            }
+        }
+        return result_n;
     }
 
     /// Read the next event off the pipe and send to the given callback function.
     /// Returns would_block if a lock could not be acquired.
     pub fn read(self: *Funnel, cb: *const funnel_callback, context: *anyopaque) funnel_errors!isize {
         if (self.closed) return funnel_errors.closed;
-        var result_n: isize = 0;
-        if (self.lock.tryLock()) {
-            defer self.lock.unlock();
-            result_n = std.c.read(self.readFd(), self.buffer.ptr, self.buffer.len);
-            if (result_n > 0) {
-                if (self.marshaller.unmarshal) |unmarshal_fn| {
-                    const event = unmarshal_fn(self.buffer.ptr, self.buffer.len);
-                    if (event) |e| {
-                        cb(e, context);
-                    }
-                }
+        if (self.nonblock) {
+            if (self.lock.tryLock()) {
+                defer self.lock.unlock();
+                return try self.read_fn(cb, context);
             }
-            return result_n;
+        } else {
+            self.lock.lock();
+            defer self.lock.unlock();
+            return try self.read_fn(cb, context);
         }
         return funnel_errors.would_block;
     }
@@ -185,9 +207,10 @@ pub const funnel_t = extern struct {
 /// Initialize a funnel object to be used in external C program.
 /// @param fun The C funnel structure.
 /// @param marshaller The event marshaller structure.
+/// @param nonblock Flag for nonblocking actions.
 /// @return 0 for success, anything else error.
-pub export fn funnel_init(fun: *funnel_t, marshaller: EventMarshaller) c_int {
-    const result: *Funnel = Funnel.create(std.heap.c_allocator, marshaller) catch |err| {
+pub export fn funnel_init(fun: *funnel_t, marshaller: EventMarshaller, nonblock: bool) c_int {
+    const result: *Funnel = Funnel.create(std.heap.c_allocator, marshaller, nonblock) catch |err| {
         if (@TypeOf(err) == funnel_errors) {
             return error_to_c_error(err);
         }
