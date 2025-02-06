@@ -19,13 +19,13 @@ pub const funnel_notifs_t = enum(c_int) {
 };
 
 /// Marshal function signature.
-pub const marshal_func = fn (*anyopaque, [*]u8, usize) callconv(.C) c_int;
+pub const marshal_func = fn (payload: *anyopaque, buf: [*]u8, len: usize) callconv(.C) c_int;
 /// Unmarshal function signature.
-pub const unmarshal_func = fn ([*]const u8) callconv(.C) ?*anyopaque;
+pub const unmarshal_func = fn (buf: [*]const u8, len: usize) callconv(.C) ?*anyopaque;
 /// Size function signature.
 pub const size_func = fn () callconv(.C) usize;
 /// Funnel callback function signature.
-pub const funnel_callback = fn (*anyopaque) callconv(.C) void;
+pub const funnel_callback = fn (event: *anyopaque, context: *anyopaque) callconv(.C) void;
 
 /// Convert Zig error to C error.
 pub fn error_to_c_error(e: funnel_errors) c_int {
@@ -62,11 +62,11 @@ pub const Event = extern struct {
 /// Currently the marshaller does not support dynamic payload size.
 pub const EventMarshaller = extern struct {
     /// Marshal events.
-    marshal: ?*marshal_func = undefined,
+    marshal: ?*const marshal_func = undefined,
     /// Unmarshal events.
-    unmarshal: ?*unmarshal_func = undefined,
+    unmarshal: ?*const unmarshal_func = undefined,
     /// Size of event payload.
-    size: ?*size_func = undefined,
+    size: ?*const size_func = undefined,
 };
 
 /// Structure to setup and manage writing and reading events between callers and receivers.
@@ -146,7 +146,7 @@ pub const Funnel = struct {
 
     /// Read the next event off the pipe and send to the given callback function.
     /// Returns would_block if a lock could not be acquired.
-    pub fn read(self: *Funnel, cb: *const funnel_callback) funnel_errors!isize {
+    pub fn read(self: *Funnel, cb: *const funnel_callback, context: *anyopaque) funnel_errors!isize {
         if (self.closed) return funnel_errors.closed;
         var result_n: isize = 0;
         if (self.lock.tryLock()) {
@@ -154,9 +154,9 @@ pub const Funnel = struct {
             result_n = std.c.read(self.readFd(), self.buffer.ptr, self.buffer.len);
             if (result_n > 0) {
                 if (self.marshaller.unmarshal) |unmarshal_fn| {
-                    const event = unmarshal_fn(self.buffer.ptr);
+                    const event = unmarshal_fn(self.buffer.ptr, self.buffer.len);
                     if (event) |e| {
-                        cb(e);
+                        cb(e, context);
                     }
                 }
             }
@@ -226,11 +226,11 @@ pub export fn funnel_write(fun: *funnel_t, e: Event) funnel_result {
 /// @param fun The funnel structure.
 /// @param cb The callback function to read the next event into.
 /// @return The result to contain SUCCESS, WOULD_BLOCK, or error info.
-pub export fn funnel_read(fun: *funnel_t, cb: *const funnel_callback) funnel_result {
+pub export fn funnel_read(fun: *funnel_t, cb: *const funnel_callback, context: *anyopaque) funnel_result {
     var result = funnel_result{};
     var n: isize = 0;
     const rawValue: *Funnel = @alignCast(@ptrCast(fun.__internal));
-    if (rawValue.read(cb)) |val| {
+    if (rawValue.read(cb, context)) |val| {
         n = val;
     } else |err| {
         result.result = error_to_c_error(err);

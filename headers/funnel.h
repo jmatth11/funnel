@@ -8,11 +8,11 @@
 /**
  * Marshal function type
  */
-typedef int(*marshal_func)(void*, uint8_t*, size_t);
+typedef int(*marshal_func)(void* payload, uint8_t* buf, size_t len);
 /**
  * Unmarshal function type
  */
-typedef void*(*unmarshal_func)(uint8_t*);
+typedef void*(*unmarshal_func)(uint8_t* buf, size_t len);
 /**
  * Size function type
  */
@@ -20,7 +20,7 @@ typedef size_t (*size_func)();
 /**
  * Callback function type
  */
-typedef void (*funnel_callback_func)(void*);
+typedef void (*funnel_callback_func)(void* event, void* context);
 
 /**
  * Funnel enumeration types.
@@ -97,7 +97,7 @@ struct funnel_result funnel_write(struct funnel_t *fun, struct event_t e) __nonn
  * @param[in] cb The callback function to handle the data.
  * @return The result. Can be successful, failure, or WOULD_BLOCK.
  */
-struct funnel_result funnel_read(struct funnel_t *fun, funnel_callback_func cb) __nonnull((1,2));
+struct funnel_result funnel_read(struct funnel_t *fun, funnel_callback_func cb, void* context) __nonnull((1,2));
 
 /**
  * Free the given funnel.
