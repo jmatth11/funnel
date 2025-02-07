@@ -22,6 +22,8 @@ pub fn build(b: *std.Build) void {
     // create module
     _ = b.addModule("funnel", .{
         .root_source_file = b.path("src/root.zig"),
+        .target = target,
+        .optimize = optimize,
     });
 
     const lib_unit_tests = b.addTest(.{
