@@ -17,7 +17,6 @@ Add to your `build.zig`
 ```zig
 const funnel_lib = b.dependency("funnel", .{
     .target = target,
-    .optimize = optimize,
 });
 
 lib.root_module.addImport("funnel", funnel_lib.module("funnel"));
