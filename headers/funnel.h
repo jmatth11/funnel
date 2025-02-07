@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 #include <sys/cdefs.h>
 
 /**
@@ -77,9 +78,10 @@ struct funnel_result {
  *
  * @param[out] fun The funnel structure.
  * @param[in] marshaller The event marshaller.
+ * @param[in] nonblock Flag to have nonblocking actions.
  * @return 0 on success, anything else for failure.
  */
-int funnel_init(struct funnel_t *fun, struct event_marshaller_t marshaller) __nonnull((1));
+int funnel_init(struct funnel_t *fun, struct event_marshaller_t marshaller, bool nonblock) __nonnull((1));
 
 /**
  * Write the given event to the funnel.
