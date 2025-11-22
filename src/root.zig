@@ -19,13 +19,13 @@ pub const funnel_notifs_t = enum(c_int) {
 };
 
 /// Marshal function signature.
-pub const marshal_func = fn (payload: *anyopaque, buf: [*]u8, len: usize) callconv(.C) c_int;
+pub const marshal_func = fn (payload: *anyopaque, buf: [*]u8, len: usize) callconv(.c) c_int;
 /// Unmarshal function signature.
-pub const unmarshal_func = fn (buf: [*]const u8, len: usize) callconv(.C) ?*anyopaque;
+pub const unmarshal_func = fn (buf: [*]const u8, len: usize) callconv(.c) ?*anyopaque;
 /// Size function signature.
-pub const size_func = fn () callconv(.C) usize;
+pub const size_func = fn () callconv(.c) usize;
 /// Funnel callback function signature.
-pub const funnel_callback = fn (event: *anyopaque, context: *anyopaque) callconv(.C) void;
+pub const funnel_callback = fn (event: *anyopaque, context: *anyopaque) callconv(.c) void;
 
 /// Convert Zig error to C error.
 pub fn error_to_c_error(e: funnel_errors) c_int {

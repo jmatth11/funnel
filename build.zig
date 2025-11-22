@@ -2,34 +2,39 @@ const std = @import("std");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{
-        .preferred_optimize_mode = .ReleaseFast,
-    });
+    const optimize = b.standardOptimizeOption(.{});
 
-    const lib = b.addStaticLibrary(.{
-        .name = "funnel",
+    // create module
+    const mod = b.addModule("funnel", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
         .pic = true,
     });
 
-    b.installArtifact(lib);
+    const linkage = b.option(
+        std.builtin.LinkMode,
+        "linkage",
+        "Link mode for utf8-zig library",
+    ) orelse .static;
+    const lib = b.addLibrary(.{
+        .root_module = mod,
+        .linkage = linkage,
+        .name = "funnel",
+    });
 
     lib.bundle_compiler_rt = true;
     lib.linkLibC();
 
-    // create module
-    _ = b.addModule("funnel", .{
+    b.installArtifact(lib);
+
+    const tests_mod = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
     });
-
     const lib_unit_tests = b.addTest(.{
-        .root_source_file = b.path("src/root.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = tests_mod,
     });
     lib_unit_tests.linkLibC();
 

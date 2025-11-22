@@ -1,6 +1,7 @@
 .{
-    .name = "funnel",
+    .name = .funnel,
     .version = "0.0.1",
+    .fingerprint = 0x9b63f6d0a1aec684,
     .dependencies = .{},
     .paths = .{
         "build.zig",
